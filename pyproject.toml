@@ -1,0 +1,10 @@
+[project]
+name = "powersmooth"
+version = "0.1.0"
+description = "Bayesian smoothing for time-series data"
+authors = [{ name="Maximilian Kotz", email="kotzmax@gmail.com" }]
+dependencies = []
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
