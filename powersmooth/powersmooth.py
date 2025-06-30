@@ -26,10 +26,12 @@ def finite_diff_matrix(x: np.ndarray, order: int) -> sp.csr_matrix:
         for i in range(1, n-1):
             dx1 = x[i] - x[i-1]
             dx2 = x[i+1] - x[i]
-            denom = (dx1 + dx2) * dx1 * dx2
             rows += [i, i, i]
             cols += [i-1, i, i+1]
-            data += [2/dx1/denom, -2*(1/dx1 + 1/dx2)/denom, 2/dx2/denom]
+            c1 = 2.0 / (dx1 * (dx1 + dx2))
+            c2 = -2.0 / (dx1 * dx2)
+            c3 = 2.0 / (dx2 * (dx1 + dx2))
+            data += [c1, c2, c3]
     elif order == 3:
         for i in range(2, n-2):
             dx1 = x[i] - x[i-1]
