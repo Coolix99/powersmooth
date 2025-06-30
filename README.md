@@ -10,3 +10,4 @@ grids suitable for the smoothing routine:
 * ``upsample_to_uniform`` – resamples data on a uniformly spaced grid via
   linear interpolation and returns a mask marking the original sample
   positions.
+
