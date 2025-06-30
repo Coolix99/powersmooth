@@ -128,3 +128,33 @@ def upsample_with_mask(x: np.ndarray, y: np.ndarray, dx: float) -> tuple:
     mask_new.append(1)
 
     return np.array(x_new), np.array(y_new), np.array(mask_new)
+
+def upsample_to_uniform(x: np.ndarray, y: np.ndarray, dx: float) -> tuple:
+    """Resample data to a uniformly spaced grid using linear interpolation.
+
+    Parameters
+    ----------
+    x : array_like
+        Original sample positions (not necessarily uniformly spaced).
+    y : array_like
+        Values corresponding to ``x``.
+    dx : float
+        Desired spacing of the uniform grid.
+
+    Returns
+    -------
+    tuple
+        ``(x_uniform, y_uniform, mask_uniform)`` where ``x_uniform`` is the
+        uniformly spaced grid, ``y_uniform`` are the linearly interpolated
+        values and ``mask_uniform`` marks positions that coincide with an
+        original sample (1 for original sample positions, 0 otherwise).
+    """
+    x = np.asarray(x).flatten()
+    y = np.asarray(y).flatten()
+    assert len(x) == len(y), "x and y must have the same length"
+
+    x_uniform = np.arange(x[0], x[-1] + dx * 0.5, dx)
+    y_uniform = np.interp(x_uniform, x, y)
+
+    mask_uniform = np.isclose(x_uniform[:, None], x, atol=1e-12).any(axis=1).astype(int)
+    return x_uniform, y_uniform, mask_uniform
