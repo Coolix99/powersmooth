@@ -233,7 +233,7 @@ def powersmooth_upsample(x, y, weights, dx=0.1):
     """
     x_up, y_up, mask_up = upsample_with_mask(x, y, dx)
     smooth_y = powersmooth_general(x_up, y_up, weights=weights, mask=mask_up)
-    return x_up, smooth_y
+    return x_up, smooth_y,mask_up
 
 def powersmooth_on_uniform_grid(x, y, weights, dx=0.1, return_dense=False):
     """
@@ -266,6 +266,6 @@ def powersmooth_on_uniform_grid(x, y, weights, dx=0.1, return_dense=False):
     y_smooth = powersmooth_general(x_dense, y_dense, weights=weights, mask=mask)
 
     if return_dense:
-        return x_dense, y_smooth
+        return x_dense, y_smooth, mask
     else:
         return x_dense[~inserted_mask], y_smooth[~inserted_mask]

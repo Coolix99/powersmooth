@@ -3,8 +3,8 @@ from numpy.testing import assert_allclose
 
 from powersmooth.powersmooth import (
     powersmooth_general,
-    upsample_with_mask,
-    upsample_to_uniform,
+    powersmooth_upsample,
+    powersmooth_on_uniform_grid,
 )
 
 
@@ -29,16 +29,12 @@ def cubic_func(x):
 def _check_unchanged(x, y, weights):
     """Helper asserting that smoothing keeps the values at sample points."""
     smooth = powersmooth_general(x, y, weights)
-
-    xu, yu, mask = upsample_with_mask(x, y, dx=0.05)
-    smooth_up = powersmooth_general(xu, yu, weights, mask)
-
-    xu2, yu2, mask2 = upsample_to_uniform(x, y, dx=0.05)
-    smooth_up2 = powersmooth_general(xu2, yu2, weights, mask2)
+    xu, yu,mask = powersmooth_upsample(x, y,weights, dx=0.05)
+    xu2, yu2, mask2 = powersmooth_on_uniform_grid(x, y,weights, dx=0.05, return_dense=True)
 
     assert_allclose(smooth, y, rtol=1e-6)
-    assert_allclose(smooth_up[mask == 1], yu[mask == 1], rtol=1e-6)
-    assert_allclose(smooth_up2[mask2 == 1], yu2[mask2 == 1], rtol=1e-6)
+    assert_allclose(yu[mask == 1], y, rtol=1e-6)
+    assert_allclose(yu2[mask2 == 1], y, rtol=1e-6)
 
 
 # Constant function should remain constant for any weights

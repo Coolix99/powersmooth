@@ -21,7 +21,7 @@ if __name__ == "__main__":
     smooth_y_general = powersmooth_general(x, y, weights)
 
     # Smoothed on upsampled grid
-    x_up, y_up_smooth = powersmooth_upsample(x, y, weights, dx=0.1)
+    x_up, y_up_smooth,_ = powersmooth_upsample(x, y, weights, dx=0.1)
 
     # Smoothed on uniform grid, stripped of inserted points
     x_uniform, y_uniform_smooth = powersmooth_on_uniform_grid(x, y, weights, dx=0.1)
