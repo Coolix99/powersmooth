@@ -146,32 +146,63 @@ def upsample_with_mask(x: np.ndarray, y: np.ndarray, dx: float) -> tuple:
 
     return np.array(x_new), np.array(y_new), np.array(mask_new)
 
-def upsample_to_uniform(x: np.ndarray, y: np.ndarray, dx: float) -> tuple:
-    """Resample data to a uniformly spaced grid using linear interpolation.
+def upsample_with_exact_data_inclusion(x: np.ndarray, y: np.ndarray, dx: float, atol=1e-8):
+    """
+    Create a uniform grid that includes all original x values,
+    inserting them if needed, and prepare data/mask for smoothing.
 
     Parameters
     ----------
     x : array_like
-        Original sample positions (not necessarily uniformly spaced).
+        Original sample positions (non-uniform).
     y : array_like
-        Values corresponding to ``x``.
+        Corresponding values.
     dx : float
-        Desired spacing of the uniform grid.
+        Approximate spacing of the uniform grid.
+    atol : float
+        Absolute tolerance for matching grid points.
 
     Returns
     -------
     tuple
-        ``(x_uniform, y_uniform, mask_uniform)`` where ``x_uniform`` is the
-        uniformly spaced grid, ``y_uniform`` are the linearly interpolated
-        values and ``mask_uniform`` marks positions that coincide with an
-        original sample (1 for original sample positions, 0 otherwise).
+        x_dense : np.ndarray
+            Uniform grid + inserted original points (sorted)
+        y_dense : np.ndarray
+            y values at original positions, zeros elsewhere
+        mask : np.ndarray
+            1 where original y-values are placed, 0 elsewhere
+        inserted_mask : np.ndarray
+            True where original points were inserted (to optionally remove after smoothing)
     """
     x = np.asarray(x).flatten()
     y = np.asarray(y).flatten()
-    assert len(x) == len(y), "x and y must have the same length"
+    assert len(x) == len(y)
 
+    # Create base uniform grid
     x_uniform = np.arange(x[0], x[-1] + dx * 0.5, dx)
-    y_uniform = np.interp(x_uniform, x, y)
 
-    mask_uniform = np.isclose(x_uniform[:, None], x, atol=1e-12).any(axis=1).astype(int)
-    return x_uniform, y_uniform, mask_uniform
+    # Identify x[i] not close to any x_uniform
+    close_mask = np.isclose(x[:, None], x_uniform[None, :], atol=atol).any(axis=1)
+    x_missing = x[~close_mask]
+
+    # Merge and sort
+    x_dense = np.concatenate([x_uniform, x_missing])
+    x_dense = np.unique(np.sort(x_dense))  # ensure strict order and no duplicates
+
+    # Place y values and build masks
+    y_dense = np.zeros_like(x_dense)
+    mask = np.zeros_like(x_dense, dtype=int)
+    inserted_mask = np.zeros_like(x_dense, dtype=bool)
+
+    for xi, yi in zip(x, y):
+        idx = np.argmin(np.abs(x_dense - xi))
+        if np.abs(x_dense[idx] - xi) <= atol:
+            y_dense[idx] = yi
+            mask[idx] = 1
+        else:
+            raise RuntimeError("Failed to match original point — should not happen.")
+
+    # mark points that were not in the original grid
+    inserted_mask = ~np.isclose(x_dense[:, None], x_uniform[None, :], atol=atol).any(axis=1)
+
+    return x_dense, y_dense, mask, inserted_mask

@@ -3,11 +3,11 @@
 from .powersmooth import (
     powersmooth_general,
     upsample_with_mask,
-    upsample_to_uniform,
+    upsample_with_exact_data_inclusion,
 )
 
 __all__ = [
     "powersmooth_general",
     "upsample_with_mask",
-    "upsample_to_uniform",
+    "upsample_with_exact_data_inclusion",
 ]
