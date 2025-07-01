@@ -206,3 +206,66 @@ def upsample_with_exact_data_inclusion(x: np.ndarray, y: np.ndarray, dx: float, 
     inserted_mask = ~np.isclose(x_dense[:, None], x_uniform[None, :], atol=atol).any(axis=1)
 
     return x_dense, y_dense, mask, inserted_mask
+
+def powersmooth_upsample(x, y, weights, dx=0.1):
+    """
+    Smooth data by first inserting intermediate points between original x values.
+    Original values are retained via a binary mask, and intermediate values are
+    filled in by solving a regularized smoothing system.
+
+    Parameters
+    ----------
+    x : array_like
+        Original sample positions (not necessarily uniform).
+    y : array_like
+        Data values at positions x.
+    weights : dict
+        Regularization weights for derivatives (e.g. {2: 1e-3, 3: 1e-3}).
+    dx : float
+        Approximate spacing between inserted (upsampled) grid points.
+
+    Returns
+    -------
+    x_up : ndarray
+        Densified x grid including original and inserted points.
+    smooth_y : ndarray
+        Smoothed y values on the densified grid.
+    """
+    x_up, y_up, mask_up = upsample_with_mask(x, y, dx)
+    smooth_y = powersmooth_general(x_up, y_up, weights=weights, mask=mask_up)
+    return x_up, smooth_y
+
+def powersmooth_on_uniform_grid(x, y, weights, dx=0.1, return_dense=False):
+    """
+    Smooth non-uniform data onto a uniform grid by embedding the original
+    points into a regular grid (with insertion if necessary), applying a
+    regularized smoothing solver, and removing extra points afterward.
+
+    Parameters
+    ----------
+    x : array_like
+        Original sample positions (non-uniform).
+    y : array_like
+        Data values at positions x.
+    weights : dict
+        Regularization weights for derivatives (e.g. {2: 1e-3, 3: 1e-3}).
+    dx : float
+        Approximate spacing of the uniform grid.
+    return_dense : bool
+        If True, return the full dense solution with inserted points;
+        if False (default), return only the regularly spaced part.
+
+    Returns
+    -------
+    x_out : ndarray
+        Uniform grid (or dense grid if `return_dense=True`).
+    y_smooth : ndarray
+        Smoothed y values on the returned grid.
+    """
+    x_dense, y_dense, mask, inserted_mask = upsample_with_exact_data_inclusion(x, y, dx)
+    y_smooth = powersmooth_general(x_dense, y_dense, weights=weights, mask=mask)
+
+    if return_dense:
+        return x_dense, y_smooth
+    else:
+        return x_dense[~inserted_mask], y_smooth[~inserted_mask]

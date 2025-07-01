@@ -2,12 +2,12 @@
 
 from .powersmooth import (
     powersmooth_general,
-    upsample_with_mask,
-    upsample_with_exact_data_inclusion,
+    powersmooth_upsample,
+    powersmooth_on_uniform_grid,
 )
 
 __all__ = [
     "powersmooth_general",
-    "upsample_with_mask",
-    "upsample_with_exact_data_inclusion",
+    "powersmooth_upsample",
+    "powersmooth_on_uniform_grid",
 ]
