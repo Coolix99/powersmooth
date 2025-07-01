@@ -25,10 +25,10 @@ def test_finite_diff_uniform():
     D3 = finite_diff_matrix(x, 3).toarray()
     expected3 = np.zeros((6, 6))
     for i in range(2, 4):
-        expected3[i, i - 1] = -1.0 / 6.0
-        expected3[i, i] = 5.0 / 12.0
-        expected3[i, i + 1] = -5.0 / 12.0
-        expected3[i, i + 2] = 1.0 / 6.0
+            expected3[i, i-2] = -0.5
+            expected3[i, i-1] =  1.0
+            expected3[i, i+1] = -1.0
+            expected3[i, i+2] =  0.5
     assert_allclose(D3, expected3)
 
 
@@ -46,3 +46,12 @@ def test_upsample_with_mask():
     assert_allclose(x_new, expected_x)
     assert_allclose(y_new, expected_y)
     assert_allclose(mask_new, expected_mask)
+
+if __name__ == "__main__":
+    print("Running test_finite_diff_uniform...")
+    test_finite_diff_uniform()
+    print("✓ test_finite_diff_uniform passed")
+
+    print("Running test_upsample_with_mask...")
+    test_upsample_with_mask()
+    print("✓ test_upsample_with_mask passed")

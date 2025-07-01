@@ -1,18 +1,28 @@
 import numpy as np
 import scipy.sparse as sp
 import scipy.sparse.linalg as spla
+import warnings
+
+def _fd_weights_vandermonde(xi: np.ndarray, x0: float, m: int) -> np.ndarray:
+    """
+    Compute FD weights w_j so that
+        f^(m)(x0) ≈ sum_j w_j * f(xi[j]),
+    by solving the Vandermonde system:
+        sum_j w_j*(xi[j]-x0)^k = k! * δ_{k,m},  k=0..n-1.
+    xi : array of n stencil points
+    x0 : center point
+    m  : derivative order
+    returns: w of length n
+    """
+    n = len(xi)
+    t = xi - x0
+    # build moment matrix A[k,j] = t[j]^k
+    A = np.vstack([t**k for k in range(n)])      # shape (n,n)
+    # RHS: [0,0,..., m!, ...,0] (1 at k=m times m!)
+    rhs = np.array([np.math.factorial(k) if k == m else 0 for k in range(n)])
+    return np.linalg.solve(A, rhs)               # shape (n,)
 
 def finite_diff_matrix(x: np.ndarray, order: int) -> sp.csr_matrix:
-    """
-    Construct a sparse finite difference matrix for non-uniformly spaced data.
-
-    Parameters:
-    - x: 1D array of positions (non-uniform spacing allowed)
-    - order: Derivative order (1, 2, or 3)
-
-    Returns:
-    - Sparse CSR matrix D such that D @ y approximates the derivative y^(order)
-    """
     n = len(x)
     rows, cols, data = [], [], []
 
@@ -22,27 +32,28 @@ def finite_diff_matrix(x: np.ndarray, order: int) -> sp.csr_matrix:
             rows += [i, i]
             cols += [i-1, i+1]
             data += [-1/dx, 1/dx]
+
     elif order == 2:
         for i in range(1, n-1):
-            dx1 = x[i] - x[i-1]
-            dx2 = x[i+1] - x[i]
-            rows += [i, i, i]
+            dx1, dx2 = x[i]-x[i-1], x[i+1]-x[i]
+            rows += [i]*3
             cols += [i-1, i, i+1]
-            c1 = 2.0 / (dx1 * (dx1 + dx2))
-            c2 = -2.0 / (dx1 * dx2)
-            c3 = 2.0 / (dx2 * (dx1 + dx2))
-            data += [c1, c2, c3]
+            data += [
+                2.0 / (dx1*(dx1+dx2)),
+                -2.0/(dx1*dx2),
+                2.0 / (dx2*(dx1+dx2))
+            ]
+
     elif order == 3:
         for i in range(2, n-2):
-            dx1 = x[i] - x[i-1]
-            dx2 = x[i+1] - x[i]
-            dx3 = x[i+2] - x[i+1]
-            denom1 = dx1 * (dx1 + dx2) * (dx1 + dx2 + dx3)
-            denom2 = dx2 * (dx1 + dx2) * (dx2 + dx3)
-            denom3 = dx3 * (dx2 + dx3) * (dx1 + dx2 + dx3)
-            rows += [i]*4
-            cols += [i-1, i, i+1, i+2]
-            data += [-1/denom1, 1/denom1 + 1/denom2, -1/denom2 - 1/denom3, 1/denom3]
+            idx = np.arange(i-2, i+3)       # [i-2, i-1, i, i+1, i+2]
+            xi  = x[idx]
+            w   = _fd_weights_vandermonde(xi, x[i], 3)
+            rows.extend([i]*5)
+            cols.extend(idx.tolist())
+            data.extend(w.tolist())
+
+
     else:
         raise ValueError("Only 1st, 2nd, 3rd derivatives supported")
 
@@ -84,7 +95,13 @@ def powersmooth_general(x: np.ndarray,
         A_penalty += w * (Dk.T @ Dk)
 
     A = A0 + A_penalty
-
+    cond = np.linalg.cond(A.toarray())
+    if cond > 1e12:
+        warnings.warn(
+            f"Matrix A is ill-conditioned (cond={cond:.2e}); solution may be unstable.",
+            category=RuntimeWarning,
+            stacklevel=2
+        )
     y_smooth = spla.spsolve(A, b)
     return y_smooth
 
