@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "powersmooth"
+version = "0.1.1"
+description = "Derivative-based regularization smoothing for 1D signals on uniform and non-uniform grids"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+
+authors = [
+    { name = "Maximilian Kotz", email = "kotzmax@gmail.com" }
+]
+
+dependencies = [
+    "numpy",
+    "scipy"
+]
+
+keywords = [
+    "smoothing",
+    "regularization",
+    "finite-differences",
+    "signal-processing",
+    "numerical-methods"
+]
+
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Mathematics",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["powersmooth*"]
+

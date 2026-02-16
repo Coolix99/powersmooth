@@ -2,6 +2,7 @@ import numpy as np
 import scipy.sparse as sp
 import scipy.sparse.linalg as spla
 import warnings
+from typing import Dict, Tuple
 
 def _fd_weights_vandermonde(xi: np.ndarray, x0: float, m: int) -> np.ndarray:
     """
@@ -23,67 +24,117 @@ def _fd_weights_vandermonde(xi: np.ndarray, x0: float, m: int) -> np.ndarray:
     return np.linalg.solve(A, rhs)               # shape (n,)
 
 def finite_diff_matrix(x: np.ndarray, order: int) -> sp.csr_matrix:
+    """
+    Construct sparse finite-difference matrix approximating the
+    `order`-th derivative on possibly non-uniform grid `x`.
+
+    Uses:
+        - 3-point stencil for 1st and 2nd derivatives
+        - 5-point stencil for 3rd derivative
+
+    One-sided stencils are automatically used at boundaries.
+
+    Parameters
+    ----------
+    x : ndarray of shape (n,)
+        Strictly increasing grid points.
+    order : int
+        Derivative order (1, 2, or 3).
+
+    Returns
+    -------
+    csr_matrix of shape (n, n)
+        Sparse derivative operator.
+    """
+    x = np.asarray(x).flatten()
     n = len(x)
+
+    if order not in (1, 2, 3):
+        raise ValueError("Only 1st, 2nd, 3rd derivatives supported.")
+
+    if not np.all(np.diff(x) > 0):
+        raise ValueError("x must be strictly increasing.")
+
+    # ---- stencil size selection ----
+    if order in (1, 2):
+        stencil_size = 3
+    else:  # order == 3
+        stencil_size = 5
+
+    if n < stencil_size:
+        raise ValueError("Not enough grid points for requested derivative.")
+
     rows, cols, data = [], [], []
 
-    if order == 1:
-        for i in range(1, n-1):
-            dx = x[i+1] - x[i-1]
-            rows += [i, i]
-            cols += [i-1, i+1]
-            data += [-1/dx, 1/dx]
+    for i in range(n):
+        # determine stencil indices
+        left = max(0, i - stencil_size // 2)
+        right = min(n, left + stencil_size)
 
-    elif order == 2:
-        for i in range(1, n-1):
-            dx1, dx2 = x[i]-x[i-1], x[i+1]-x[i]
-            rows += [i]*3
-            cols += [i-1, i, i+1]
-            data += [
-                2.0 / (dx1*(dx1+dx2)),
-                -2.0/(dx1*dx2),
-                2.0 / (dx2*(dx1+dx2))
-            ]
+        if right - left < stencil_size:
+            left = max(0, right - stencil_size)
 
-    elif order == 3:
-        for i in range(2, n-2):
-            idx = np.arange(i-2, i+3)       # [i-2, i-1, i, i+1, i+2]
-            xi  = x[idx]
-            w   = _fd_weights_vandermonde(xi, x[i], 3)
-            rows.extend([i]*5)
-            cols.extend(idx.tolist())
-            data.extend(w.tolist())
+        idx = np.arange(left, right)
+        xi = x[idx]
 
+        w = _fd_weights_vandermonde(xi, x[i], order)
 
-    else:
-        raise ValueError("Only 1st, 2nd, 3rd derivatives supported")
+        rows.extend([i] * len(idx))
+        cols.extend(idx.tolist())
+        data.extend(w.tolist())
 
     return sp.csr_matrix((data, (rows, cols)), shape=(n, n))
 
-def powersmooth_general(x: np.ndarray,
-                         y: np.ndarray,
-                         weights: dict,
-                         mask: np.ndarray = None) -> np.ndarray:
+def powersmooth_general(
+    x: np.ndarray,
+    y: np.ndarray,
+    weights: Dict[int, float],
+    mask: np.ndarray | None = None,
+) -> np.ndarray:
     """
-    Perform smoothing on non-uniformly spaced data with derivative-based regularization.
+    Solve the regularized least-squares problem
 
-    Parameters:
-    - x: 1D array of positions (non-uniformly spaced)
-    - y: 1D array of observations at positions x
-    - weights: dict mapping derivative order to penalty weight (e.g., {1: 0.1, 2: 0.01})
-    - mask: Optional array (same shape as y) indicating where data fidelity should apply (1=True, 0=False)
+        min_u || M (u - y) ||_2^2 + sum_k w_k || D_k u ||_2^2
 
-    Returns:
-    - Smoothed version of y as 1D array
+    on a possibly non-uniform grid.
+
+    Parameters
+    ----------
+    x : ndarray of shape (n,)
+        Strictly increasing sample positions.
+    y : ndarray of shape (n,)
+        Observed data values.
+    weights : dict[int, float]
+        Mapping derivative order to regularization weight.
+    mask : ndarray of shape (n,), optional
+        Data fidelity mask (1 = enforce data, 0 = free).
+
+    Returns
+    -------
+    ndarray of shape (n,)
+        Smoothed signal.
     """
     x = np.asarray(x).flatten()
     y = np.asarray(y).flatten()
     assert len(x) == len(y), "x and y must have same length"
+
+    if not np.all(np.diff(x) > 0):
+        raise ValueError("x must be strictly increasing.")
+
+    for order, w in weights.items():
+        if order < 1:
+            raise ValueError("Derivative order must be >= 1.")
+        if w < 0:
+            raise ValueError("Regularization weights must be non-negative.")
+
     n = len(x)
 
     if mask is None:
         mask = np.ones(n)
     else:
-        mask = np.asarray(mask).astype(float).flatten()
+        mask = np.asarray(mask, dtype=float).flatten()
+        if len(mask) != n:
+            raise ValueError("mask must have same length as x and y.")
 
     A0 = sp.diags(mask, 0, shape=(n, n), format='csr')
     b = mask * y
@@ -105,7 +156,12 @@ def powersmooth_general(x: np.ndarray,
     y_smooth = spla.spsolve(A, b)
     return y_smooth
 
-def upsample_with_mask(x: np.ndarray, y: np.ndarray, dx: float) -> tuple:
+def upsample_with_mask(
+    x: np.ndarray,
+    y: np.ndarray,
+    dx: float
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+
     """
     Densify a non-uniform dataset by inserting intermediate points between known values.
 
@@ -146,7 +202,12 @@ def upsample_with_mask(x: np.ndarray, y: np.ndarray, dx: float) -> tuple:
 
     return np.array(x_new), np.array(y_new), np.array(mask_new)
 
-def upsample_with_exact_data_inclusion(x: np.ndarray, y: np.ndarray, dx: float, atol=1e-8):
+def upsample_with_exact_data_inclusion(
+    x: np.ndarray,
+    y: np.ndarray,
+    dx: float,
+    atol: float = 1e-8
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Create a uniform grid that includes all original x values,
     inserting them if needed, and prepare data/mask for smoothing.
@@ -207,7 +268,12 @@ def upsample_with_exact_data_inclusion(x: np.ndarray, y: np.ndarray, dx: float, 
 
     return x_dense, y_dense, mask, inserted_mask
 
-def powersmooth_upsample(x, y, weights, dx=0.1):
+def powersmooth_upsample(
+    x: np.ndarray,
+    y: np.ndarray,
+    weights: Dict[int, float],
+    dx: float = 0.1
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Smooth data by first inserting intermediate points between original x values.
     Original values are retained via a binary mask, and intermediate values are
@@ -235,7 +301,13 @@ def powersmooth_upsample(x, y, weights, dx=0.1):
     smooth_y = powersmooth_general(x_up, y_up, weights=weights, mask=mask_up)
     return x_up, smooth_y,mask_up
 
-def powersmooth_on_uniform_grid(x, y, weights, dx=0.1, return_dense=False):
+def powersmooth_on_uniform_grid(
+    x: np.ndarray,
+    y: np.ndarray,
+    weights: Dict[int, float],
+    dx: float = 0.1,
+    return_dense: bool = False
+) -> Tuple[np.ndarray, np.ndarray] | Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Smooth non-uniform data onto a uniform grid by embedding the original
     points into a regular grid (with insertion if necessary), applying a
